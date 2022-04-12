@@ -15,7 +15,7 @@ var bkgrnd_color = 0;
 // Set defualt line properties used for
 const start_pos = width; 
 const vert_pos = height / 2;
-const strk_wght = 2; //Thickness of the line 
+const strk_wght = 1.2; //Thickness of the line 
 const space_between_lines = 1; //Thickness of space in between the lines 
 
 // Initial testing vars. Will be replaced later when the sound lib is added
