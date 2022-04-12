@@ -19,8 +19,8 @@ const strk_wght = 2; //Thickness of the line
 const space_between_lines = 1; //Thickness of space in between the lines 
 
 // Initial testing vars. Will be replaced later when the sound lib is added
-const init_length = 150;
-const init_color = 255; // White 
+const line_length = 10; // Default value 
+const line_color = 255; // Defulat value is White 
 
 // Creates the drawing area 
 function setup () {
@@ -46,14 +46,14 @@ function draw() {
 
 }
 
-// Create audio line object 
+// Class to create audio line object 
 class AudioLine {
     constructor() {
         this.x_pos = start_pos;
-        this.y_pos = vert_pos;
-        this.lngth = init_length;
+        this.y_pos = vert_pos; // Will be dtermined by audio input 
+        this.lngth = line_length;
         this.thickness = strk_wght;
-        this.color = init_color;
+        this.color = line_color; // Will be dtermined by audio input
     }
 
     move() {
