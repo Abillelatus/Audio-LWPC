@@ -25,10 +25,11 @@ const line_color = 255; // Defulat value is White
 // vars for mic inpit
 window.AudioContext = window.AudioContext || window.webkitAudioContext;
 let analyser, audioContext;
-let buf = new Float32Array(1024);
-let rafID = null;
 let currentNote = 0;
-let currentName = 0;
+let currentName = "-";
+
+// this will hold raw mic input later
+let buf = new Float32Array(2048);
 
 const noteStrings = [
     "C",
@@ -76,13 +77,18 @@ function draw() {
     if (noise_line[0].x_pos < 0) {
         noise_line.shift();
     }
+
+    // if we started recording already update pitch every frame
+    if (analyser) {
+        updatePitch();
+    }
 }
 
 // Class to create audio line object
 class AudioLine {
     constructor() {
         this.x_pos = start_pos;
-        this.y_pos = height - (Math.round(currentNote) / 5) * 7; // Will be dtermined by audio input
+        this.y_pos = height - (Math.round(currentNote) / 10) * 7; // Will be dtermined by audio input
         this.lngth = line_length;
         this.thickness = strk_wght;
         this.color = line_color; // Will be dtermined by audio input
@@ -105,9 +111,14 @@ class AudioLine {
     }
 } //END AudioLine CLASS
 
+/**
+ * Chrome requires user input to start recording so this is
+ * where i put it
+ */
 function startRecording() {
     audioContext = new AudioContext();
     analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
 
     navigator.mediaDevices
         .getUserMedia({
@@ -122,9 +133,12 @@ function startRecording() {
             },
         })
         .then(function (stream) {
+            // connect analyser to mic input
             let mediaStreamSource =
                 audioContext.createMediaStreamSource(stream);
             mediaStreamSource.connect(analyser);
+
+            // get current pitch once upon init
             updatePitch();
         })
         .catch(function (err) {
@@ -132,31 +146,39 @@ function startRecording() {
         });
 }
 
+/**
+ * Every time this is called, grab a little sample of mic
+ * input and calculate the current pitch
+ */
 function updatePitch() {
     analyser.getFloatTimeDomainData(buf);
-    var pitch = autoCorrelate(buf, audioContext.sampleRate);
-    console.log(pitch);
-    if (pitch != -1) {
-        let name = noteStrings[noteFromPitch(pitch) % 12];
-        currentName = name;
-    }
 
+    // raw freq of current input
+    let pitch = autoCorrelate(buf, audioContext.sampleRate);
     currentNote = pitch;
 
-    if (!window.requestAnimationFrame)
-        window.requestAnimationFrame = window.webkitRequestAnimationFrame;
-    rafID = window.requestAnimationFrame(updatePitch);
+    if (pitch != -1) {
+        // note name of closest official note
+        let name = noteStrings[noteFromPitch(pitch) % 12];
+        currentName = name;
+    } else {
+        currentName = "-";
+    }
 }
 
-// not really sure what the return of this really means
-// but it returns a number?
+/**
+ * I'm pretty sure this translates a frequency into the
+ * closest official note frequency?? but honestly i have no idea
+ */
 function noteFromPitch(frequency) {
     var noteNum = 12 * (Math.log(frequency / 440) / Math.log(2));
     return Math.round(noteNum) + 69;
 }
 
-// this gets you the closest real note I think...
-// it returns a pitch in Hz
+/**
+ * Checks for volume of input, and if loud enough
+ * returns the frequency of current mic input in Hz
+ */
 function autoCorrelate(buf, sampleRate) {
     var SIZE = buf.length;
     var MAX_SAMPLES = Math.floor(SIZE / 2);
@@ -171,6 +193,7 @@ function autoCorrelate(buf, sampleRate) {
         rms += val * val;
     }
 
+    // short circuit if not loud enough to bother
     rms = Math.sqrt(rms / SIZE);
     if (rms < 0.05) return -1;
 
@@ -204,5 +227,6 @@ function autoCorrelate(buf, sampleRate) {
     if (best_correlation > 0.01) {
         return sampleRate / best_offset;
     }
+
     return -1;
 }
