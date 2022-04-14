@@ -13,28 +13,27 @@ const width = 1500;
 const height = 800;
 var bkgrnd_color = 0;
 
-// Set defualt line properties used for
-const start_pos = width-110; 
+// Defualt line position properties 
+const start_pos = width - 110; 
 const vert_pos = height / 2;
-const strk_wght = 1.2; //Thickness of the line 
-const space_between_lines = 1; //Thickness of space in between the lines 
+const strk_wght = 1; //Thickness of the line 
+const space_between_lines = 2.3; //Thickness of space in between the lines 
 
-// Initial testing vars. Will be replaced later when the sound lib is added
+// Line size properties 
 const line_length = 10; // Default value 
 var mic_multiplier;
-const input_amp = 2; // Amplifies the signal of mic_multiplier 
+const input_amp = 1.5; // Amplifies the signal of mic_multiplier 
 
 // Alternate mic input for pitch analysis 
 window.AudioContext = window.AudioContext || window.webkitAudioContext;
 let analyser, audioContext;
 var curr_pitch; // Determines the color
 
-//var line_color = frequency_to_rgb(curr_pitch);
-var line_color = 255;
+//var color of the line. Will constantly be updated
+var line_color = 'rgb(255, 255, 255)';
 
 // this will hold raw mic input later
 let buf = new Float32Array(2048);
-
 
 // Preload function to load images
 function preload() {
@@ -61,6 +60,9 @@ function mousePressed() {
 function draw() {
     background(bkgrnd_color);
 
+    // Add image of speaker 
+    image(spkr_img, width-110, (height/2)-65), 20, 20;
+
     // Mic interaction
     text('tap to start', width/2, 20);
     mic_multiplier = mic_in.getLevel();
@@ -70,11 +72,8 @@ function draw() {
         updatePitch();
     }
 
-    // Update color of the line 
-    //frequency_to_rgb(curr_pitch);
-    
-    // Add image of speaker 
-    image(spkr_img, width-110, (height/2)-65), 20, 20;
+    // Update color of the line based on the pictch 
+    line_color = frequency_to_rgb(curr_pitch);
 
     // Create new line to add to the array 
     noise_line.push(new AudioLine());
@@ -96,17 +95,16 @@ function draw() {
 // Class to create audio line object 
 class AudioLine {
     constructor() {
-        this.color = line_color;
+        this.color = line_color;// Will be dtermined by audio pitch
         this.x_pos = start_pos;
-        this.y_pos = vert_pos; // Will be dtermined by audio input 
+        this.y_pos = vert_pos; // Will be dtermined by audio amplitude
         this.lngth = line_length + ((mic_multiplier * input_amp) * height);
         this.thickness = strk_wght;
-         // Will be dtermined by audio input
     }
 
     move() {
         /* Used to create the scrolling from right to left */
-        this.x_pos = this.x_pos - (this.thickness * 2);
+        this.x_pos = this.x_pos - (this.thickness * space_between_lines);
     }
 
     display() {
@@ -126,7 +124,7 @@ function startRecording() {
             audio: {
                 mandatory: {
                     googEchoCancellation: "false",
-                    googAutoGainControl: "false",
+                    googAutoGainControl: "true",
                     googNoiseSuppression: "false",
                     googHighpassFilter: "false",
                 },
@@ -183,7 +181,7 @@ function startRecording() {
 
     // short circuit if not loud enough to bother
     rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.05) return -1;
+    if (rms < 0.02) return -1; // original was .05
 
     var lastCorrelation = 1;
     for (var offset = 0; offset < MAX_SAMPLES; offset++) {
@@ -196,7 +194,8 @@ function startRecording() {
         correlation = 1 - correlation / MAX_SAMPLES;
         correlations[offset] = correlation;
 
-        if (correlation > 0.9 && correlation > lastCorrelation) {
+        //if (correlation > 0.7 && correlation > lastCorrelation) {
+        if (correlation > 0.7 && correlation > lastCorrelation) {
             foundGoodCorrelation = true;
             if (correlation > best_correlation) {
                 best_correlation = correlation;
@@ -220,25 +219,29 @@ function startRecording() {
 }
 
 function frequency_to_rgb(freq_pitch) {
-    // defualt color is white when no pitch is detected 
-    // default is red when there is a pitch detected 
-    if (freq_pitch < 1) {
-        return 255;
-    }
-
+    // Cause I don't like using the passed value
     const f_p = freq_pitch;
 
-    // Create max hearing range in htz to use 
-    const max_htz = 10000;
-    const conversion_coe = (6 * 255) / max_htz;
-    var pitch_points = freq_pitch * conversion_coe;
+    // If no signal is provided (i.e. -1) then return white
+    if (f_p < 2 || f_p == undefined) {
+        return 'rgb(255, 255, 255)';
+    }
 
-    var r_rgb = 255; // Default to red
+    // Deffine a Max Hrtz to create an value to covers the top RGB scale  
+    const max_htz = 6000; // normal = 6000, guitar = 500
+    // Creates the coefficent 
+    const conversion_coe = (255) / (max_htz / 5) ;
+    // Convert htz into what I call pitch points based on the coefficent calculated. It
+    // Then distributes these points to the RGB values depending on what is the active 
+    // stage. 
+    var pitch_points = f_p * conversion_coe; 
+
+    // Starting default value. Starts at red and ends at red
+    var r_rgb = 255;
     var g_rgb = 0;
     var b_rgb = 0;
 
-    var tmp_count = 0;
-
+    // Stages that define what part of the RBG model it's currently progressing through
     var r_y_stage = true;
     var y_g_stage = false;
     var g_bb_stage = false;
@@ -246,13 +249,14 @@ function frequency_to_rgb(freq_pitch) {
     var b_p_stage = false;
     var p_r_stage = false;
 
-    // Get ready for a bunch of if statements 
+    // Functions of each stage that either lower or raise the rgb value
     function r_y() {g_rgb = g_rgb + 1;pitch_points = pitch_points - 1;}
     function y_g() {r_rgb = r_rgb - 1;pitch_points = pitch_points - 1;}
     function g_bb() {b_rgb = b_rgb + 1;pitch_points = pitch_points - 1;}
     function bb_b() {g_rgb = g_rgb - 1;pitch_points = pitch_points - 1;}
     function b_p() {r_rgb = r_rgb + 1;pitch_points = pitch_points - 1;}
     function p_r() {b_rgb = b_rgb - 1;pitch_points = pitch_points - 1;}
+
 
     while (pitch_points > 0) {
         if (r_y_stage == true) {
@@ -281,8 +285,10 @@ function frequency_to_rgb(freq_pitch) {
         }
     }
 
-    return r_rgb, g_rgb, b_rgb;
+    rgb_final = 'rgb';
+    rgb_final = rgb_final.concat("(", r_rgb, ", ", g_rgb, ", ", b_rgb, ")");
 
+    return rgb_final;
 }
 
 
